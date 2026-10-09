@@ -142,4 +142,3 @@ func redisURL(ctx context.Context) (string, func(), error) {
 	cleanup := func() { _ = container.Terminate(ctx) }
 	return url, cleanup, nil
 }
-

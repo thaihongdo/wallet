@@ -57,8 +57,8 @@ type fakeWalletRepo struct {
 	mu      sync.Mutex
 	wallets map[uuid.UUID]domain.Wallet
 
-	createErr       error
-	lockErr         error
+	createErr        error
+	lockErr          error
 	updateBalanceErr error
 }
 
