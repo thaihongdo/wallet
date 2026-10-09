@@ -21,6 +21,7 @@ import (
 	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
 
 	"github.com/thaihongdo/go-wallet/internal/adapter/postgres"
+	redisadapter "github.com/thaihongdo/go-wallet/internal/adapter/redis"
 	"github.com/thaihongdo/go-wallet/internal/usecase"
 )
 
@@ -33,6 +34,9 @@ var (
 	ledgerRepo    *postgres.LedgerRepo
 	outboxRepo    *postgres.OutboxRepo
 	txManager     *postgres.TxManager
+
+	idemStore   *redisadapter.IdempotencyStore
+	rateLimiter *redisadapter.RateLimiter
 
 	topUpUC    *usecase.TopUpUsecase
 	transferUC *usecase.TransferUsecase
@@ -87,6 +91,9 @@ func run(ctx context.Context, m *testing.M) (int, error) {
 	ledgerRepo = postgres.NewLedgerRepo(pool)
 	outboxRepo = postgres.NewOutboxRepo(pool)
 	txManager = postgres.NewTxManager(pool)
+
+	idemStore = redisadapter.NewIdempotencyStore(redisClient)
+	rateLimiter = redisadapter.NewRateLimiter(redisClient)
 
 	clock := time.Now
 	newID := newUUIDv7

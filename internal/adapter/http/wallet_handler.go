@@ -13,15 +13,6 @@ import (
 	"github.com/thaihongdo/go-wallet/internal/usecase"
 )
 
-// idempotencyKeyHeader is the request header carrying the client's
-// idempotency key for money-moving endpoints.
-const idempotencyKeyHeader = "Idempotency-Key"
-
-const (
-	minIdempotencyKeyLen = 1
-	maxIdempotencyKeyLen = 128
-)
-
 // WalletUsecase is the subset of *usecase.WalletUsecase the handlers
 // depend on, declared here so handlers can be tested against a fake.
 type WalletUsecase interface {
@@ -85,7 +76,7 @@ func (h *WalletHandler) TopUp(c *gin.Context) {
 		return
 	}
 
-	key, ok := requireIdempotencyKey(c)
+	key, ok := middleware.RequireIdempotencyKey(c)
 	if !ok {
 		return
 	}
@@ -174,17 +165,4 @@ func parseUUIDParam(c *gin.Context, name string) (id uuid.UUID, ok bool) {
 		return uuid.UUID{}, false
 	}
 	return id, true
-}
-
-// requireIdempotencyKey reads and validates the Idempotency-Key header.
-// This check also runs inside the idempotency middleware when present;
-// keeping it in the handler too means correctness does not depend on
-// that middleware being wired in.
-func requireIdempotencyKey(c *gin.Context) (string, bool) {
-	key := c.GetHeader(idempotencyKeyHeader)
-	if len(key) < minIdempotencyKeyLen || len(key) > maxIdempotencyKeyLen {
-		middleware.RespondError(c, http.StatusBadRequest, "IDEMPOTENCY_KEY_REQUIRED", "Idempotency-Key header is required (1..128 chars)")
-		return "", false
-	}
-	return key, true
 }

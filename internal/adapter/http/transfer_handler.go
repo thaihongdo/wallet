@@ -28,7 +28,7 @@ func NewTransferHandler(transfers TransferUsecase) *TransferHandler {
 
 // Create handles POST /v1/transfers.
 func (h *TransferHandler) Create(c *gin.Context) {
-	key, ok := requireIdempotencyKey(c)
+	key, ok := middleware.RequireIdempotencyKey(c)
 	if !ok {
 		return
 	}
