@@ -4,8 +4,6 @@ A small, production-minded **wallet & ledger backend** in Go: create wallets, to
 
 Built for a Senior Golang Backend interview (code review / screen share): clarity, correctness under concurrency, and explicit trade-offs matter more than feature count.
 
-**Live URL:** _not yet deployed — see "Remaining [HUMAN] steps" below._
-
 ---
 
 ## Architecture
@@ -100,28 +98,6 @@ Errors: `{"error":{"code":"INSUFFICIENT_BALANCE","message":"..."},"request_id":"
 
 ---
 
-## Design decisions & trade-offs
-
-- **Clean Architecture, consumer-side interfaces.** `internal/domain` and `internal/usecase` import only stdlib + `google/uuid` — no `gin`, `pgx`, or `go-redis`. Repository/service interfaces live in `usecase/ports.go`, next to the code that calls them, and are implemented by adapters. This keeps business rules testable with plain in-memory fakes and lets the HTTP framework or driver be swapped without touching domain logic.
-
-- **`TxManager` with tx-in-context.** `WithinTx` begins a transaction and stashes it in `context.Context` under an unexported key; repositories pull it out (or fall back to the pool) via a small `querier(ctx)` helper. This keeps the transaction *boundary* in the usecase (where the business operation is defined) without leaking a `pgx.Tx` type into `usecase` signatures.
-
-- **Pessimistic row locking, ordered by ID.** `Transfer` and `TopUp` lock wallet rows with `SELECT ... WHERE id = ANY($1) ORDER BY id FOR UPDATE`. Locking in ascending ID order — regardless of which wallet is "from" and which is "to" — means two concurrent transfers in opposite directions (A→B and B→A) always acquire their locks in the same order, so neither can deadlock waiting on the other. We chose this over optimistic locking (would need a retry loop and still serializes under high contention on hot wallets) and over a Redis distributed lock (adds a second source of truth and a lock-expiry/fencing problem for no benefit, since Postgres already gives us transactional locking for free).
-
-- **Idempotency: Redis fast path + DB constraint as source of truth.** The idempotency middleware uses Redis (`SETNX` + stored result) to short-circuit duplicate/in-flight requests cheaply. But correctness does not depend on Redis: `operations.idempotency_key` has a `UNIQUE` constraint, and the usecase layer handles the race where two requests both pass the Redis check and hit Postgres at the same time — the loser's insert fails with `23505`, which is mapped to `ErrDuplicateIdempotencyKey` and resolved into a replay. If Redis errors, the middleware fails open (logs a warning, lets the request through) rather than blocking all traffic on a cache outage; the DB constraint still prevents a double-spend.
-
-- **Double-entry ledger + `balance_after`.** Every money movement writes one or two immutable `ledger_entries` rows (DEBIT/CREDIT) alongside the balance update, each recording the wallet's balance *after* that entry. This makes the ledger self-auditing: replaying a wallet's entries in order must reproduce its current balance (exercised by the concurrency integration test), and it gives a complete audit trail independent of the mutable `wallets.balance` column.
-
-- **UUIDv7 for IDs → simple keyset pagination.** `uuid.NewV7()` IDs are time-ordered, so `ledger_entries(wallet_id, id DESC)` gives correct newest-first ordering and keyset (cursor) pagination — `WHERE id < $cursor ORDER BY id DESC LIMIT $n` — is both efficient (no OFFSET) and stable under concurrent inserts between page fetches (new rows get larger IDs, so they never show up "behind" an already-issued cursor).
-
-- **Outbox written in the same transaction; relay deferred.** `transfer.completed` / `wallet.topped_up` events are inserted into `outbox` in the same DB transaction as the money movement, so the event can never be lost or published without the underlying change (or vice versa). A relay process to actually publish these (and mark `published_at`) is not implemented: on Cloud Run, a long-running background worker fights CPU throttling when the instance is idle between requests. In production I'd run the relay as a Cloud Run Job on a Cloud Scheduler trigger, or as a small min-instance worker service.
-
-- **Rate limiting: fixed window.** `INCR`+`EXPIRE` (atomic via a small Lua script) per API key per UTC minute. Simple and cheap, with a known weakness: a client can send up to `2×limit` requests across a window boundary (e.g. the limit's worth at `:59` and again at `:00`). A sliding-window log or token bucket would close that gap at the cost of more Redis state/complexity; fixed window was the right trade for the time budget here.
-
-- **Money as `int64` VND, single currency.** No floats anywhere in the money path, avoiding an entire class of rounding bugs. Multi-currency is out of scope (see below) but the schema's `currency CHAR(3)` and the usecase's currency-mismatch check are already in place for it.
-
----
-
 ## Testing strategy
 
 - **Unit tests** (`make test`, `-race`): domain (`Debit`/`Credit` edge cases including overflow), usecase (table-driven, against hand-written in-memory fakes — including a `fakeTxManager` that snapshots/restores state to verify rollback on error), and HTTP (`httptest` + a real Gin router + fake usecases, covering every row of the error-mapping table, auth, and request-ID propagation). No mock-generator libraries; fakes are plain Go structs with function-field hooks for per-test error injection.
@@ -130,36 +106,7 @@ Errors: `{"error":{"code":"INSUFFICIENT_BALANCE","message":"..."},"request_id":"
 
 ---
 
-## What I'd do next
+## Further reading
 
-- **Auth:** replace static API keys with JWT/OAuth2 and per-tenant scoping.
-- **Outbox relay:** a Cloud Run Job (Cloud Scheduler-triggered) or min-instance worker to actually publish `outbox` events and mark them `published_at`.
-- **Observability:** `/metrics` (Prometheus) and OpenTelemetry tracing across the HTTP → usecase → Postgres/Redis path.
-- **Multi-currency:** the schema and currency-mismatch check are already in place; would need an FX/conversion usecase and decide whether transfers across currencies are allowed at all.
-- **Rate limiting:** upgrade fixed-window to a sliding window or token bucket to remove the boundary-burst weakness.
-- **CD:** the optional `deploy.yml` (Workload Identity Federation + `deploy-cloudrun`, triggered on `v*` tags) described in the plan — not built in this pass (marked Could).
-
----
-
-## Remaining [HUMAN] steps (Cloud Run deployment)
-
-These require account/billing access this agent does not have:
-
-1. Create a Neon Postgres project (region `aws-ap-southeast-1` / Singapore); copy the **direct (non-pooled)** connection string with `sslmode=require`.
-2. Create an Upstash Redis DB (Singapore); copy the `rediss://` TCP URL.
-3. Run migrations against it: `DATABASE_URL=<neon-direct-url> make migrate-up`.
-4. In GCP: create a project, enable billing, enable the Cloud Run, Cloud Build, Artifact Registry, and Secret Manager APIs.
-5. Create secrets `db-url`, `redis-url`, `api-keys`; grant the Cloud Run runtime service account `roles/secretmanager.secretAccessor`.
-6. Deploy:
-   ```bash
-   gcloud run deploy go-wallet \
-     --source . \
-     --region asia-southeast1 \
-     --allow-unauthenticated \
-     --max-instances 2 \
-     --set-env-vars GIN_MODE=release,DB_MAX_CONNS=5,RATE_LIMIT_PER_MIN=60 \
-     --set-secrets DATABASE_URL=db-url:latest,REDIS_URL=redis-url:latest,API_KEYS=api-keys:latest
-   ```
-7. Run `scripts/smoke.sh <BASE_URL> <API_KEY>` against the deployed URL.
-
-**Operational notes:** the app must listen on `$PORT` (it does — see `cmd/api/main.go`). Neon's free compute scales to zero, so the first request after idle is slower; warm it with a `/readyz` call before a demo. Keep `DB_MAX_CONNS` small, since Cloud Run can run multiple instances each holding their own pool.
+- [DESIGN.md](DESIGN.md) — architecture decisions and trade-offs
+- [NEXT_STEPS.md](NEXT_STEPS.md) — planned improvements and Cloud Run deployment steps
