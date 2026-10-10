@@ -105,3 +105,12 @@ Errors: `{"error":{"code":"INSUFFICIENT_BALANCE","message":"..."},"request_id":"
 - Everything always runs with `-race`, since this service's entire value proposition is concurrency correctness.
 
 ---
+
+## Deploy command 
+gcloud run deploy go-wallet \
+  --source . \
+  --region asia-southeast1 \
+  --allow-unauthenticated \
+  --max-instances 2 \
+  --set-env-vars GIN_MODE=release,DB_MAX_CONNS=5,RATE_LIMIT_PER_MIN=60 \
+  --set-secrets DATABASE_URL=db-url:latest,REDIS_URL=redis-url:latest,API_KEYS=api-keys:latest
