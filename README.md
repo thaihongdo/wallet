@@ -105,8 +105,3 @@ Errors: `{"error":{"code":"INSUFFICIENT_BALANCE","message":"..."},"request_id":"
 - Everything always runs with `-race`, since this service's entire value proposition is concurrency correctness.
 
 ---
-
-## Further reading
-
-- [DESIGN.md](DESIGN.md) — architecture decisions and trade-offs
-- [NEXT_STEPS.md](NEXT_STEPS.md) — planned improvements and Cloud Run deployment steps
