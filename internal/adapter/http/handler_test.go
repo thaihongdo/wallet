@@ -91,7 +91,7 @@ func TestCreateWallet_HappyPath(t *testing.T) {
 	tr := newTestRouter()
 	now := time.Now()
 	id := uuid.Must(uuid.NewV7())
-	tr.wallets.createFn = func(ctx context.Context, ownerID string) (*domain.Wallet, error) {
+	tr.wallets.createFn = func(_ context.Context, ownerID string) (*domain.Wallet, error) {
 		assert.Equal(t, "user-1", ownerID)
 		return &domain.Wallet{ID: id, OwnerID: ownerID, Currency: "VND", Balance: 0, CreatedAt: now, UpdatedAt: now}, nil
 	}
@@ -106,7 +106,7 @@ func TestCreateWallet_HappyPath(t *testing.T) {
 func TestGetWallet_HappyPath(t *testing.T) {
 	tr := newTestRouter()
 	id := uuid.Must(uuid.NewV7())
-	tr.wallets.getFn = func(ctx context.Context, got uuid.UUID) (*domain.Wallet, error) {
+	tr.wallets.getFn = func(_ context.Context, got uuid.UUID) (*domain.Wallet, error) {
 		assert.Equal(t, id, got)
 		return &domain.Wallet{ID: id, Currency: "VND", Balance: 500}, nil
 	}
@@ -127,13 +127,13 @@ func TestTopUp_HappyPath(t *testing.T) {
 	tr := newTestRouter()
 	walletID := uuid.Must(uuid.NewV7())
 	opID := uuid.Must(uuid.NewV7())
-	tr.topUp.fn = func(ctx context.Context, in usecase.TopUpInput) (usecase.TopUpResult, error) {
+	tr.topUp.fn = func(_ context.Context, in usecase.TopUpInput) (usecase.TopUpResult, error) {
 		assert.Equal(t, "idem-1", in.IdempotencyKey)
 		assert.Equal(t, walletID, in.WalletID)
 		assert.Equal(t, domain.Money(100000), in.Amount)
 		return usecase.TopUpResult{Operation: domain.Operation{ID: opID}, Balance: 100000}, nil
 	}
-	tr.wallets.getFn = func(ctx context.Context, id uuid.UUID) (*domain.Wallet, error) {
+	tr.wallets.getFn = func(_ context.Context, _ uuid.UUID) (*domain.Wallet, error) {
 		return &domain.Wallet{ID: walletID, Currency: "VND", Balance: 100000}, nil
 	}
 
@@ -148,10 +148,10 @@ func TestTopUp_HappyPath(t *testing.T) {
 func TestTopUp_Replayed_SetsHeader(t *testing.T) {
 	tr := newTestRouter()
 	walletID := uuid.Must(uuid.NewV7())
-	tr.topUp.fn = func(ctx context.Context, in usecase.TopUpInput) (usecase.TopUpResult, error) {
+	tr.topUp.fn = func(_ context.Context, _ usecase.TopUpInput) (usecase.TopUpResult, error) {
 		return usecase.TopUpResult{Operation: domain.Operation{ID: uuid.Must(uuid.NewV7())}, Replayed: true}, nil
 	}
-	tr.wallets.getFn = func(ctx context.Context, id uuid.UUID) (*domain.Wallet, error) {
+	tr.wallets.getFn = func(_ context.Context, _ uuid.UUID) (*domain.Wallet, error) {
 		return &domain.Wallet{ID: walletID}, nil
 	}
 
@@ -165,7 +165,7 @@ func TestTransfer_HappyPath(t *testing.T) {
 	tr := newTestRouter()
 	from, to := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
 	opID := uuid.Must(uuid.NewV7())
-	tr.transfers.fn = func(ctx context.Context, in usecase.TransferInput) (usecase.TransferResult, error) {
+	tr.transfers.fn = func(_ context.Context, in usecase.TransferInput) (usecase.TransferResult, error) {
 		assert.Equal(t, from, in.FromWalletID)
 		assert.Equal(t, to, in.ToWalletID)
 		return usecase.TransferResult{
@@ -187,7 +187,7 @@ func TestListEntries_HappyPath(t *testing.T) {
 	tr := newTestRouter()
 	walletID := uuid.Must(uuid.NewV7())
 	entryID := uuid.Must(uuid.NewV7())
-	tr.wallets.listFn = func(ctx context.Context, got uuid.UUID, cursor *uuid.UUID, limit int) ([]domain.LedgerEntry, *uuid.UUID, error) {
+	tr.wallets.listFn = func(_ context.Context, got uuid.UUID, _ *uuid.UUID, _ int) ([]domain.LedgerEntry, *uuid.UUID, error) {
 		assert.Equal(t, walletID, got)
 		return []domain.LedgerEntry{{ID: entryID, Direction: domain.DirectionCredit, Amount: 10, BalanceAfter: 10}}, nil, nil
 	}
@@ -249,7 +249,7 @@ func TestErrorMapping(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tr := newTestRouter()
 			id := uuid.Must(uuid.NewV7())
-			tr.wallets.getFn = func(ctx context.Context, got uuid.UUID) (*domain.Wallet, error) {
+			tr.wallets.getFn = func(_ context.Context, _ uuid.UUID) (*domain.Wallet, error) {
 				return nil, tc.err
 			}
 			rec := doRequest(t, tr.engine, http.MethodGet, "/v1/wallets/"+id.String(), nil, authHeaders(nil))

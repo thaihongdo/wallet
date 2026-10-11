@@ -20,9 +20,9 @@ import (
 const IdempotencyKeyHeader = "Idempotency-Key"
 
 const (
-	// MinIdempotencyKeyLen and MaxIdempotencyKeyLen bound a valid
-	// Idempotency-Key header per §8.4.
+	// MinIdempotencyKeyLen is the minimum length of the Idempotency-Key header per §8.4.
 	MinIdempotencyKeyLen = 1
+	// MaxIdempotencyKeyLen is the maximum length of the Idempotency-Key header per §8.4.
 	MaxIdempotencyKeyLen = 128
 	// idempotencyTTL is how long a completed (or in-flight) idempotency
 	// record is retained, per §8.4.

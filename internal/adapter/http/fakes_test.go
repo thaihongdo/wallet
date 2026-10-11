@@ -52,6 +52,6 @@ type fakePinger struct {
 	err error
 }
 
-func (f *fakePinger) Ping(ctx context.Context) error {
+func (f *fakePinger) Ping(_ context.Context) error {
 	return f.err
 }
