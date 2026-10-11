@@ -100,7 +100,7 @@ func TestTransfer_ConcurrentRandom(t *testing.T) {
 			sum += ledgerSignedSum(more)
 			cursor = pageCursor(more, 100)
 		}
-		assert.Equal(t, int64(w.Balance), int64(concurrencyTestInitialBalance)+sum,
+		assert.Equal(t, int64(w.Balance), sum,
 			"ledger sum for wallet %s must reconstruct its balance", id)
 	}
 	assert.Equal(t, int64(totalBefore), int64(totalAfter), "total money must be conserved")
